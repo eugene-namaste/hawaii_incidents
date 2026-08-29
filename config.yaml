@@ -1,0 +1,205 @@
+# ============================================================
+# ArcGIS Incident Viewer Configuration
+# ============================================================
+
+app:
+  title: "NERIS Incident Viewer"
+  subtitle: "Fire Service Incidents"
+
+data:
+  service_url: "https://services1.arcgis.com/ejbgqcCL0yNBugWr/arcgis/rest/services/FireServiceIncidents_Rebuild/FeatureServer/0"
+
+map:
+  basemap: "streets-navigation-vector"
+  initial_center:
+    - -157.7
+    - 20.8
+  initial_zoom: 7
+  selection_zoom: 16
+  extent_expand_factor: 1.15
+
+  # ----------------------------------------------------------
+  # Map symbology
+  #
+  # Supported renderer types:
+  #   simple        = one symbol for every feature
+  #   unique_value  = symbol based on a field value
+  #
+  # Any value not listed under "values" uses default_symbol.
+  # ----------------------------------------------------------
+
+  renderer:
+    type: "unique_value"
+    field: "NERIS_CATEGORY"
+
+    default_symbol:
+      label: "Other"
+      style: "circle"
+      size: 6
+      color: "#808080"
+      outline_color: "#ffffff"
+      outline_width: 0.5
+
+    values:
+      - value: "FIRE"
+        label: "Fire"
+        style: "circle"
+        size: 12
+        color: "#d73027"
+        outline_color: "#ffffff"
+        outline_width: 0.5
+
+      - value: "MEDICAL"
+        label: "Medical"
+        style: "circle"
+        size: 7
+        color: "#4575b4"
+        outline_color: "#ffffff"
+        outline_width: 0.5
+
+      - value: "RESCUE"
+        label: "Rescue"
+        style: "circle"
+        size: 7
+        color: "#fdae61"
+        outline_color: "#ffffff"
+        outline_width: 0.5
+
+      - value: "HAZSIT"
+        label: "Hazardous Situation"
+        style: "circle"
+        size: 7
+        color: "#984ea3"
+        outline_color: "#ffffff"
+        outline_width: 0.5
+
+      - value: "PUBSERV"
+        label: "Public Service"
+        style: "circle"
+        size: 7
+        color: "#66a61e"
+        outline_color: "#ffffff"
+        outline_width: 0.5
+
+      - value: "NOEMERG"
+        label: "Non-Emergency"
+        style: "circle"
+        size: 6
+        color: "#999999"
+        outline_color: "#ffffff"
+        outline_width: 0.5
+
+# ------------------------------------------------------------
+# Filters
+#
+# Supported filter types:
+#   date_range        = fixed number-of-days choices
+#   custom_date_range = user-entered start/end dates
+#   unique_values     = values read dynamically from the layer
+#
+# To add/remove/reorder filters, edit only this section.
+# ------------------------------------------------------------
+
+filters:
+
+  - id: "incident_date"
+    type: "date_range"
+    field: "INC_DATE"
+    label: "Incident Date"
+    default: 7
+    choices:
+      - label: "Last 3 days"
+        value: 3
+      - label: "Last 7 days"
+        value: 7
+      - label: "Last 15 days"
+        value: 15
+      - label: "Last 30 days"
+        value: 30
+
+  - id: "incident_date_custom"
+    type: "custom_date_range"
+    field: "INC_DATE"
+    label: "Custom Incident Date Range"
+    max_days: 15
+    hint: "Optional. Enter start and end dates (maximum 15 days). Using this disables the preset date filter above."
+
+  - id: "fire_department"
+    type: "unique_values"
+    field: "FD_NAME"
+    label: "Fire Department"
+    multiple: true
+    empty_means_all: true
+    hint: "Ctrl/Cmd-click to select more than one. No selection = all."
+
+  - id: "neris_category"
+    type: "unique_values"
+    field: "NERIS_CATEGORY"
+    label: "NERIS Category"
+    multiple: true
+    empty_means_all: true
+    hint: "Ctrl/Cmd-click to select more than one. No selection = all."
+
+# ------------------------------------------------------------
+# Incident list
+# ------------------------------------------------------------
+
+list:
+  sort_field: "INC_DATE"
+  sort_order: "descending"
+
+  fields:
+    - field: "incidentid"
+      role: "title"
+
+    - field: "fulladdr"
+      role: "address"
+
+    - field: "NERIS_CATEGORY"
+      role: "meta"
+
+    - field: "INC_DATE"
+      role: "date"
+      type: "date_only"
+
+# ------------------------------------------------------------
+# Incident details popup
+# ------------------------------------------------------------
+
+details:
+  title_template: "Incident {incidentid}"
+
+  fields:
+    - field: "incidentid"
+      label: "Incident ID"
+
+    - field: "fulladdr"
+      label: "Address"
+
+    - field: "calldatetime"
+      label: "Call Date"
+      type: "date"
+
+    - field: "INC_DATE"
+      label: "Incident Date"
+      type: "date_only"
+
+    - field: "ENTITY_NAME"
+      label: "Fire Department"
+
+    - field: "NERIS_CATEGORY"
+      label: "NERIS Category"
+
+    - field: "NERIS_SUBCATEGORY"
+      label: "NERIS Subcategory"
+
+    - field: "PROP_USE_DESC"
+      label: "Property Use"
+
+    - field: "ACT_TAK1_DESC"
+      label: "Primary Action Taken"
+
+behavior:
+  default_status_text: "Loading..."
+  no_results_text: "No incidents match the current filters."
+  selection_highlight: true
