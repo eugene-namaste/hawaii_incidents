@@ -30,6 +30,11 @@
       renderer: buildRenderer(config)
     });
 
+    const logConfig = config.operations?.logs || {};
+    const logLayer = logConfig.service_url
+      ? new FeatureLayer({ url: logConfig.service_url, outFields: ["*"] })
+      : null;
+
     const map = new ArcGISMap({
       basemap: config.map?.basemap || "streets-navigation-vector",
       layers: [layer]
@@ -53,10 +58,186 @@
     const listEl = document.getElementById("incidentList");
     const resultCount = document.getElementById("resultCount");
     const statusEl = document.getElementById("status");
+    const lastUpdateEl = document.getElementById("lastUpdate");
+    const totalRecordsEl = document.getElementById("totalRecords");
+    const incidentsTab = document.getElementById("incidentsTab");
+    const logsTab = document.getElementById("logsTab");
+    const incidentPanel = document.getElementById("incidentPanel");
+    const logPanel = document.getElementById("logPanel");
+    const logList = document.getElementById("logList");
 
     const filterControls = new globalThis.Map();
     let currentFeatures = [];
     let highlightHandle = null;
+    let logsLoaded = false;
+
+    function setActivePanel(panelName) {
+      const showLogs = panelName === "logs";
+      incidentPanel.hidden = showLogs;
+      logPanel.hidden = !showLogs;
+      incidentsTab.classList.toggle("active", !showLogs);
+      logsTab.classList.toggle("active", showLogs);
+
+      if (showLogs && !logsLoaded) {
+        loadLatestLogs();
+      }
+    }
+
+    incidentsTab.addEventListener("click", () => setActivePanel("incidents"));
+    logsTab.addEventListener("click", () => {
+      logsLoaded = false;
+      setActivePanel("logs");
+    });
+
+    async function fetchJson(url) {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} for ${url}`);
+      }
+      const json = await response.json();
+      if (json?.error) {
+        throw new Error(json.error.message || "ArcGIS REST request failed");
+      }
+      return json;
+    }
+
+    async function loadPublicationStatus() {
+      try {
+        const baseUrl = String(config.data.service_url || "").replace(/\/$/, "");
+        const metadataUrl = `${baseUrl}?f=json`;
+        const countUrl = `${baseUrl}/query?where=1%3D1&returnCountOnly=true&f=json`;
+
+        const [metadata, countResult] = await Promise.all([
+          fetchJson(metadataUrl),
+          fetchJson(countUrl)
+        ]);
+
+        const count = Number(countResult?.count);
+        totalRecordsEl.textContent = Number.isFinite(count)
+          ? count.toLocaleString()
+          : "Not available";
+
+        const lastEdit =
+          metadata?.editingInfo?.lastEditDate ??
+          metadata?.lastEditDate ??
+          metadata?.dataLastEditDate ??
+          null;
+
+        lastUpdateEl.textContent = lastEdit ? formatDate(lastEdit) : "Not available";
+      } catch (err) {
+        console.error("Unable to load publication status", err);
+        lastUpdateEl.textContent = "Unavailable";
+        totalRecordsEl.textContent = "Unavailable";
+      }
+    }
+
+    function appendLogCard(label, feature) {
+      const card = document.createElement("div");
+      card.className = "log-card";
+
+      const title = document.createElement("div");
+      title.className = "log-card-title";
+
+      const name = document.createElement("span");
+      name.textContent = label;
+
+      const status = document.createElement("span");
+      status.className = "log-status";
+      status.textContent = feature
+        ? safeText(feature.attributes[logConfig.status_field])
+        : "No record";
+
+      title.appendChild(name);
+      title.appendChild(status);
+      card.appendChild(title);
+
+      if (feature) {
+        const date = document.createElement("div");
+        date.className = "log-date";
+        date.textContent = formatDate(feature.attributes[logConfig.run_date_field]);
+        card.appendChild(date);
+
+        const summary = document.createElement("pre");
+        summary.className = "log-summary";
+        summary.textContent = safeText(feature.attributes[logConfig.summary_field]);
+        card.appendChild(summary);
+      } else {
+        const empty = document.createElement("div");
+        empty.className = "log-date";
+        empty.textContent = "No published summary found for this script.";
+        card.appendChild(empty);
+      }
+
+      logList.appendChild(card);
+    }
+
+    async function loadLatestLogs() {
+      logList.innerHTML = '<div class="empty">Loading ETL summaries…</div>';
+
+      if (!logLayer) {
+        logList.innerHTML =
+          '<div class="empty">ETL log table is not configured yet.<br>Set operations.logs.service_url in config.yaml.</div>';
+        logsLoaded = true;
+        return;
+      }
+
+      try {
+        await logLayer.load();
+
+        const scriptField = logConfig.script_field;
+        const runDateField = logConfig.run_date_field;
+        const statusField = logConfig.status_field;
+        const summaryField = logConfig.summary_field;
+        const scripts = logConfig.scripts || [];
+
+        logList.innerHTML = "";
+
+        if (scripts.length) {
+          const jobs = scripts.map(async script => {
+            const q = logLayer.createQuery();
+            q.where = `${scriptField} = '${sqlEscape(script.value)}'`;
+            q.outFields = [scriptField, runDateField, statusField, summaryField];
+            q.returnGeometry = false;
+            q.orderByFields = [`${runDateField} DESC`];
+            q.num = 1;
+
+            const result = await logLayer.queryFeatures(q);
+            return { script, feature: result.features?.[0] || null };
+          });
+
+          const latest = await Promise.all(jobs);
+          for (const item of latest) {
+            appendLogCard(item.script.label || item.script.value, item.feature);
+          }
+        } else {
+          const q = logLayer.createQuery();
+          q.where = "1=1";
+          q.outFields = [scriptField, runDateField, statusField, summaryField];
+          q.returnGeometry = false;
+          q.orderByFields = [`${runDateField} DESC`];
+          q.num = Number(logConfig.max_records ?? 100);
+
+          const result = await logLayer.queryFeatures(q);
+          const features = result.features || [];
+          const latestByScript = new globalThis.Map();
+          for (const feature of features) {
+            const scriptName = safeText(feature.attributes[scriptField]);
+            if (!latestByScript.has(scriptName)) latestByScript.set(scriptName, feature);
+          }
+          for (const [scriptName, feature] of latestByScript) {
+            appendLogCard(scriptName, feature);
+          }
+          if (!features.length) {
+            logList.innerHTML = '<div class="empty">No ETL log records found.</div>';
+          }
+        }
+
+        logsLoaded = true;
+      } catch (err) {
+        console.error("Unable to load ETL logs", err);
+        logList.innerHTML = '<div class="empty">Unable to load ETL log summaries. See browser console for details.</div>';
+      }
+    }
 
     function buildMarkerSymbol(symbolConfig = {}) {
       return {
@@ -696,6 +877,7 @@
         statusEl.textContent = config.behavior?.default_status_text || "Loading...";
 
         await layer.load();
+        loadPublicationStatus();
 
         createFilterUI();
         syncDateFilterExclusivity();
