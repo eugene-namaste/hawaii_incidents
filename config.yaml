@@ -3,8 +3,8 @@
 # ============================================================
 
 app:
-  title: "NERIS Incident Viewer"
-  subtitle: "Fire Service Incidents"
+  title: "Hawaii Incident Viewer"
+  subtitle: "Fire Service Incidents 2020-Current"
 
 data:
   service_url: "https://services1.arcgis.com/ejbgqcCL0yNBugWr/arcgis/rest/services/FireServiceIncidents_Rebuild/FeatureServer/0"
