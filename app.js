@@ -30,6 +30,14 @@
       renderer: buildRenderer(config)
     });
 
+    // Separate lookup layer used only to populate filter choices.
+    // Keeping this independent from layer.definitionExpression prevents an
+    // already-applied incident filter from incorrectly limiting cascade values.
+    const filterLookupLayer = new FeatureLayer({
+      url: config.data.service_url,
+      outFields: ["*"]
+    });
+
     const logConfig = config.operations?.logs || {};
     const logLayer = logConfig.service_url
       ? new FeatureLayer({ url: logConfig.service_url, outFields: ["*"] })
@@ -510,6 +518,17 @@
 
           block.appendChild(select);
           control = select;
+
+          if (filter.type === "unique_values") {
+            select.addEventListener("change", async () => {
+              try {
+                await refreshCascadingChildren(filter.id);
+              } catch (err) {
+                console.error("Unable to refresh cascading filter", err);
+                statusEl.textContent = "Unable to refresh filter values. See browser console for details.";
+              }
+            });
+          }
         }
 
         if (filter.hint) {
@@ -542,43 +561,104 @@
       filtersEl.appendChild(actions);
     }
 
-    async function loadUniqueFilterValues() {
-      const jobs = [];
+    function getFilterById(filterId) {
+      return (config.filters || []).find(f => f.id === filterId) || null;
+    }
 
-      for (const filter of config.filters || []) {
-        if (filter.type !== "unique_values") continue;
+    function cascadeWhere(filter) {
+      if (!filter?.cascade_from) return `${filter.field} IS NOT NULL`;
 
-        const select = filterControls.get(filter.id);
-        if (!select) continue;
+      const parent = getFilterById(filter.cascade_from);
+      const parentControl = filterControls.get(filter.cascade_from);
 
-        jobs.push((async () => {
-          const q = layer.createQuery();
-          q.where = `${filter.field} IS NOT NULL`;
-          q.outFields = [filter.field];
-          q.returnGeometry = false;
-          q.returnDistinctValues = true;
-          q.orderByFields = [filter.field];
-
-          const result = await layer.queryFeatures(q);
-
-          const values = [...new Set(
-            result.features
-              .map(f => f.attributes[filter.field])
-              .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
-          )].sort((a, b) => String(a).localeCompare(String(b)));
-
-          select.innerHTML = "";
-
-          for (const value of values) {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = value;
-            select.appendChild(option);
-          }
-        })());
+      if (!parent || !parentControl || parent.type !== "unique_values") {
+        console.warn(
+          `Cascade parent '${filter.cascade_from}' for filter '${filter.id}' was not found.`
+        );
+        return `${filter.field} IS NOT NULL`;
       }
 
-      await Promise.all(jobs);
+      const parentValues = selectedValues(parentControl);
+      const parentClause = inClause(parent.field, parentValues);
+
+      return parentClause
+        ? `${filter.field} IS NOT NULL AND ${parentClause}`
+        : `${filter.field} IS NOT NULL`;
+    }
+
+    async function loadUniqueFilterValue(filter, { clearSelection = false } = {}) {
+      if (!filter || filter.type !== "unique_values") return;
+
+      const select = filterControls.get(filter.id);
+      if (!select) return;
+
+      const previousValues = clearSelection ? [] : selectedValues(select);
+
+      const q = filterLookupLayer.createQuery();
+      q.where = cascadeWhere(filter);
+      q.outFields = [filter.field];
+      q.returnGeometry = false;
+      q.returnDistinctValues = true;
+      q.orderByFields = [filter.field];
+
+      const result = await filterLookupLayer.queryFeatures(q);
+
+      const values = [...new Set(
+        result.features
+          .map(f => f.attributes[filter.field])
+          .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+      )].sort((a, b) => String(a).localeCompare(String(b)));
+
+      const stillSelected = new Set(
+        previousValues.filter(v => values.some(candidate => String(candidate) === String(v)))
+      );
+
+      select.innerHTML = "";
+
+      for (const value of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        option.selected = stillSelected.has(String(value));
+        select.appendChild(option);
+      }
+    }
+
+    async function refreshCascadingChildren(parentId) {
+      const children = (config.filters || []).filter(
+        f => f.type === "unique_values" && f.cascade_from === parentId
+      );
+
+      for (const child of children) {
+        await loadUniqueFilterValue(child, { clearSelection: true });
+        await refreshCascadingChildren(child.id);
+      }
+    }
+
+    async function loadUniqueFilterValues() {
+      await filterLookupLayer.load();
+
+      // Load parents/independent filters first, then cascading children.
+      const uniqueFilters = (config.filters || []).filter(f => f.type === "unique_values");
+      const loaded = new Set();
+
+      async function loadWithParents(filter) {
+        if (loaded.has(filter.id)) return;
+
+        if (filter.cascade_from) {
+          const parent = getFilterById(filter.cascade_from);
+          if (parent?.type === "unique_values") {
+            await loadWithParents(parent);
+          }
+        }
+
+        await loadUniqueFilterValue(filter);
+        loaded.add(filter.id);
+      }
+
+      for (const filter of uniqueFilters) {
+        await loadWithParents(filter);
+      }
     }
 
     function buildWhere() {
@@ -845,7 +925,7 @@
       }
     }
 
-    function clearFilters() {
+    async function clearFilters() {
       for (const filter of config.filters || []) {
         const control = filterControls.get(filter.id);
         if (!control) continue;
@@ -869,7 +949,10 @@
       }
 
       syncDateFilterExclusivity();
-      applyFilters();
+
+      // Rebuild cascading value lists from the cleared parent selections.
+      await loadUniqueFilterValues();
+      await applyFilters();
     }
 
     view.when(async () => {
