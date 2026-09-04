@@ -7,7 +7,7 @@ app:
   subtitle: "Fire Service Incidents 2020-Current"
 
 data:
-  service_url: "https://services1.arcgis.com/ejbgqcCL0yNBugWr/arcgis/rest/services/FireServiceIncidents_view/FeatureServer/0"
+  service_url: "https://services1.arcgis.com/ejbgqcCL0yNBugWr/arcgis/rest/services/FireServiceIncidents_Rebuild/FeatureServer/0"
 
 map:
   basemap: "streets-navigation-vector"
