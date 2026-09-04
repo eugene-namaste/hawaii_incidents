@@ -132,22 +132,22 @@ filters:
     empty_means_all: true
     hint: "Ctrl/Cmd-click to select more than one. No selection = all."
 
-  - id: "neris_category"
+  - id: "crr_category"
     type: "unique_values"
-    field: "NERIS_CATEGORY"
-    label: "NERIS Category"
+    field: "CRR_CATEGORY"
+    label: "CRR Category"
     multiple: true
     empty_means_all: true
     hint: "Ctrl/Cmd-click to select more than one. No selection = all."
 
-  - id: "neris_subcategory"
+  - id: "crr_subcategory"
     type: "unique_values"
-    field: "NERIS_SUBCATEGORY"
-    label: "NERIS Incident Subtype"
+    field: "CRR_SUBCATEGORY"
+    label: "CRR Subcategory"
     multiple: true
     empty_means_all: true
-    cascade_from: "neris_category"
-    hint: "Filtered by NERIS Category. Ctrl/Cmd-click to select more than one. No selection = all."
+    cascade_from: "crr_category"
+    hint: "Filtered by CRR Category. Ctrl/Cmd-click to select more than one. No selection = all."
 
 # ------------------------------------------------------------
 # Incident list
