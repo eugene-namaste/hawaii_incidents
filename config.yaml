@@ -176,7 +176,7 @@ list:
     - field: "fulladdr"
       role: "address"
 
-    - field: "CRR_SUBCATEGORY"
+    - field: "CRR_CATEGORY"
       role: "meta"
 
     - field: "INC_DATE"
