@@ -176,7 +176,7 @@ list:
     - field: "fulladdr"
       role: "address"
 
-    - field: "NERIS_CATEGORY"
+    - field: "CRR_SUBCATEGORY"
       role: "meta"
 
     - field: "INC_DATE"
@@ -208,11 +208,11 @@ details:
     - field: "ENTITY_NAME"
       label: "Fire Department"
 
-    - field: "NERIS_CATEGORY"
-      label: "NERIS Category"
+    - field: "CRR_CATEGORY"
+      label: "CRR Category"
 
-    - field: "NERIS_SUBCATEGORY"
-      label: "NERIS Subcategory"
+    - field: "CRR_SUBCATEGORY"
+      label: "CRR Subcategory"
 
     - field: "PROP_USE_DESC"
       label: "Property Use"
