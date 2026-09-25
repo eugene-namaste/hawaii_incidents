@@ -261,6 +261,18 @@
         clusterMinSize: clusterConfig.min_size || "18px",
         clusterMaxSize: clusterConfig.max_size || "40px",
 
+        // Give clusters their own simple symbol instead of deriving cluster
+        // symbology from the layer's CRR_SUBCATEGORY UniqueValueRenderer.
+        symbol: {
+          type: "simple-marker",
+          style: clusterConfig.symbol_style || "circle",
+          color: clusterConfig.symbol_color || "#007ac2",
+          outline: {
+            color: clusterConfig.symbol_outline_color || "#ffffff",
+            width: Number(clusterConfig.symbol_outline_width ?? 1)
+          }
+        },
+
         // ArcGIS automatically stops clustering when the view reaches this
         // scale and displays the layer's normal point renderer instead.
         maxScale: Number(clusterConfig.max_scale ?? 750000),
