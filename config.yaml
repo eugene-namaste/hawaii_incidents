@@ -18,6 +18,13 @@ map:
   selection_zoom: 16
   extent_expand_factor: 1.15
 
+  # Override visibility-scale settings inherited from the hosted layer/view.
+  # Keep both at 0 so the incident LayerView remains active at all map scales.
+  # Clustering below controls the statewide -> individual point transition.
+  incident_layer:
+    min_scale: 0
+    max_scale: 0
+
   # ----------------------------------------------------------
   # Clustering
   #
@@ -34,7 +41,7 @@ map:
 
   clustering:
     enabled: true
-    max_scale: 500000
+    max_scale: 750000
     radius: "55px"
     min_size: "18px"
     max_size: "40px"

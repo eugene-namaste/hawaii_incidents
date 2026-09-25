@@ -24,6 +24,11 @@
   ], (ArcGISMap, MapView, FeatureLayer) => {
 
     const layer = new FeatureLayer({
+      // Override scale dependency inherited from the hosted layer/view.
+      // This viewer needs the LayerView active statewide so clustering can work.
+      minScale: Number(config.map?.incident_layer?.min_scale ?? 0),
+      maxScale: Number(config.map?.incident_layer?.max_scale ?? 0),
+
       url: config.data.service_url,
       outFields: ["*"],
       popupTemplate: buildPopupTemplate(config),
@@ -1008,12 +1013,76 @@
       await loadUniqueFilterValues();
       await applyFilters();
     }
+    async function logIncidentDiagnostics(reason = "manual") {
+      try {
+        const layerView = await view.whenLayerView(layer);
+        const where = layer.definitionExpression || "1=1";
+        console.group(`Incident layer diagnostics: ${reason}`);
+        console.log("View zoom:", view.zoom);
+        console.log("View scale:", Math.round(view.scale));
+        console.log("Layer URL:", layer.url);
+        console.log("Geometry type:", layer.geometryType);
+        console.log("Layer visible:", layer.visible);
+        console.log("Layer minScale:", layer.minScale);
+        console.log("Layer maxScale:", layer.maxScale);
+        console.log("Layer definitionExpression:", where);
+        console.log("Layer featureReduction:", layer.featureReduction);
+        console.log("LayerView suspended:", layerView.suspended);
+        console.log("LayerView updating:", layerView.updating);
+
+        const serviceCount = await layer.queryFeatureCount({
+          geometry: view.extent,
+          spatialRelationship: "intersects",
+          where
+        });
+        console.log("SERVICE features in current extent:", serviceCount);
+
+        try {
+          const q = layerView.createQuery();
+          q.geometry = view.extent;
+          q.spatialRelationship = "intersects";
+          const layerViewCount = await layerView.queryFeatureCount(q);
+          console.log("LAYERVIEW features in current extent:", layerViewCount);
+        } catch (e) {
+          console.warn("LayerView count query failed:", e);
+        }
+
+        const reduction = layer.featureReduction;
+        const reductionType = reduction?.type || "none";
+        const reductionMaxScale = Number(reduction?.maxScale || 0);
+        const shouldCluster = reductionType === "cluster" &&
+          (!reductionMaxScale || view.scale > reductionMaxScale);
+        console.log("Feature reduction type:", reductionType);
+        console.log("Cluster maxScale:", reductionMaxScale || "(none)");
+        console.log("Should clustering be active at this scale?:", shouldCluster);
+
+        if (serviceCount > 0 && reductionType === "cluster" && shouldCluster)
+          console.log("DIAGNOSIS HINT: Features exist and clustering should be active. Focus next on FeatureReduction/LayerView rendering.");
+        if (serviceCount === 0)
+          console.log("DIAGNOSIS HINT: Service returned zero features for this extent/filter.");
+        if (layerView.suspended)
+          console.log("DIAGNOSIS HINT: LayerView is suspended; inspect visibility/scale constraints.");
+        console.groupEnd();
+      } catch (e) {
+        console.error("Incident diagnostics failed:", e);
+      }
+    }
+
+    let diagnosticTimer = null;
+    view.watch("stationary", (stationary) => {
+      if (!stationary) return;
+      clearTimeout(diagnosticTimer);
+      diagnosticTimer = setTimeout(() => logIncidentDiagnostics("map stationary"), 350);
+    });
+
+
 
     view.when(async () => {
       try {
         statusEl.textContent = config.behavior?.default_status_text || "Loading...";
 
         await layer.load();
+        setTimeout(() => logIncidentDiagnostics("initial map"), 500);
         loadPublicationStatus();
 
         createFilterUI();
