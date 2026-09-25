@@ -27,7 +27,8 @@
       url: config.data.service_url,
       outFields: ["*"],
       popupTemplate: buildPopupTemplate(config),
-      renderer: buildRenderer(config)
+      renderer: buildRenderer(config),
+      featureReduction: buildClusterReduction(config)
     });
 
     // Separate lookup layer used only to populate filter choices.
@@ -245,6 +246,47 @@
         console.error("Unable to load ETL logs", err);
         logList.innerHTML = '<div class="empty">Unable to load ETL log summaries. See browser console for details.</div>';
       }
+    }
+
+    function buildClusterReduction(cfg) {
+      const clusterConfig = cfg.map?.clustering;
+
+      if (!clusterConfig || clusterConfig.enabled === false) {
+        return null;
+      }
+
+      return {
+        type: "cluster",
+        clusterRadius: clusterConfig.radius || "55px",
+        clusterMinSize: clusterConfig.min_size || "18px",
+        clusterMaxSize: clusterConfig.max_size || "40px",
+
+        // ArcGIS automatically stops clustering when the view reaches this
+        // scale and displays the layer's normal point renderer instead.
+        maxScale: Number(clusterConfig.max_scale ?? 750000),
+
+        labelingInfo: [{
+          deconflictionStrategy: "none",
+          labelExpressionInfo: {
+            expression: "Text($feature.cluster_count, '#,###')"
+          },
+          symbol: {
+            type: "text",
+            color: clusterConfig.label_color || "#ffffff",
+            font: {
+              family: "Arial",
+              size: clusterConfig.label_size || "10px",
+              weight: "bold"
+            }
+          },
+          labelPlacement: "center-center"
+        }],
+
+        popupTemplate: {
+          title: "Incident cluster",
+          content: "This cluster contains {cluster_count} incidents."
+        }
+      };
     }
 
     function buildMarkerSymbol(symbolConfig = {}) {

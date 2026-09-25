@@ -19,6 +19,29 @@ map:
   extent_expand_factor: 1.15
 
   # ----------------------------------------------------------
+  # Clustering
+  #
+  # At small scales (statewide / island-wide), incidents are
+  # clustered so dense areas remain visible and meaningful.
+  #
+  # When the map reaches max_scale, ArcGIS automatically turns
+  # clustering off and displays the normal incident symbols
+  # defined by the renderer below.
+  #
+  # Larger max_scale = points appear sooner while zooming in.
+  # Smaller max_scale = clusters remain visible longer.
+  # ----------------------------------------------------------
+
+  clustering:
+    enabled: true
+    max_scale: 750000
+    radius: "55px"
+    min_size: "18px"
+    max_size: "40px"
+    label_color: "#ffffff"
+    label_size: "10px"
+
+  # ----------------------------------------------------------
   # Map symbology
   #
   # Supported renderer types:
