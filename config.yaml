@@ -34,7 +34,7 @@ map:
 
   clustering:
     enabled: true
-    max_scale: 750000
+    max_scale: 500000
     radius: "55px"
     min_size: "18px"
     max_size: "40px"
