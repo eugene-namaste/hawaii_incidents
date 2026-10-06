@@ -171,8 +171,7 @@ filters:
     type: "custom_date_range"
     field: "INC_DATE"
     label: "Custom Incident Date Range"
-    max_days: 15
-    hint: "Optional. Enter start and end dates (maximum 15 days). Using this disables the preset date filter above."
+    hint: "Optional. Enter any start and end dates. Using this disables the preset date filter above."
 
   - id: "fire_department"
     type: "unique_values"
@@ -180,6 +179,11 @@ filters:
     label: "Fire Department"
     multiple: true
     empty_means_all: true
+    value_labels:
+      "Kauai Fire Department": "Kauai County Fire Department"
+      "County of Maui Department Of Fire & Public Safety": "Maui Fire Department"
+      "Honolulu Fire Department": "Honolulu Fire Department"
+      "Hawaii Fire Department": "Hawaii Fire Department"
     hint: "Ctrl/Cmd-click to select more than one. No selection = all."
 
   - id: "crr_category"

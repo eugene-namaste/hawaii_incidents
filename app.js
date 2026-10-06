@@ -485,11 +485,13 @@
         throw new Error(`${filter.label || "Incident Date Range"}: end date cannot be before start date.`);
       }
 
-      const maxDays = Number(filter.max_days ?? 15);
-      const spanDays = Math.round((end - start) / 86400000);
+      if (filter.max_days !== undefined && filter.max_days !== null) {
+        const maxDays = Number(filter.max_days);
+        const spanDays = Math.round((end - start) / 86400000);
 
-      if (spanDays > maxDays) {
-        throw new Error(`${filter.label || "Incident Date Range"}: range cannot exceed ${maxDays} days.`);
+        if (spanDays > maxDays) {
+          throw new Error(`${filter.label || "Incident Date Range"}: range cannot exceed ${maxDays} days.`);
+        }
       }
 
       return { active: true, startDate, endDate };
@@ -677,7 +679,7 @@
       for (const value of values) {
         const option = document.createElement("option");
         option.value = value;
-        option.textContent = value;
+        option.textContent = filter.value_labels?.[String(value)] ?? value;
         option.selected = stillSelected.has(String(value));
         select.appendChild(option);
       }
