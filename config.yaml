@@ -18,6 +18,16 @@ map:
   selection_zoom: 16
   extent_expand_factor: 1.15
 
+  # Maximum PROGRAMMATIC filter extent. This is deliberately NOT used as a
+  # MapView navigation constraint; mouse-wheel/pan navigation remains native.
+  # Broad queries or outlier coordinates fall back to this Hawaii extent.
+  max_extent:
+    xmin: -161.0
+    ymin: 18.5
+    xmax: -154.5
+    ymax: 22.8
+    wkid: 4326
+
   # Override visibility-scale settings inherited from the hosted layer/view.
   # Keep both at 0 so the incident LayerView remains active at all map scales.
   # Clustering below controls the statewide -> individual point transition.
@@ -179,11 +189,19 @@ filters:
     label: "Fire Department"
     multiple: true
     empty_means_all: true
-    value_labels:
-      "Kauai Fire Department": "Kauai County Fire Department"
-      "County of Maui Department Of Fire & Public Safety": "Maui Fire Department"
-      "Honolulu Fire Department": "Honolulu Fire Department"
-      "Hawaii Fire Department": "Hawaii Fire Department"
+    # Canonical NERIS department names shown in the dropdown. Each choice can
+    # match both the current NERIS name and its historical NFIRS name.
+    value_groups:
+      "Kauai Fire Department":
+        - "Kauai Fire Department"
+        - "Kauai County Fire Department"
+      "County of Maui Department Of Fire & Public Safety":
+        - "County of Maui Department Of Fire & Public Safety"
+        - "Maui Fire Department"
+      "Honolulu Fire Department":
+        - "Honolulu Fire Department"
+      "Hawaii Fire Department":
+        - "Hawaii Fire Department"
     hint: "Ctrl/Cmd-click to select more than one. No selection = all."
 
   - id: "crr_category"

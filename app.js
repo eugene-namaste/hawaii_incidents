@@ -20,8 +20,10 @@
   require([
     "esri/Map",
     "esri/views/MapView",
-    "esri/layers/FeatureLayer"
-  ], (ArcGISMap, MapView, FeatureLayer) => {
+    "esri/layers/FeatureLayer",
+    "esri/geometry/Extent",
+    "esri/geometry/support/webMercatorUtils"
+  ], (ArcGISMap, MapView, FeatureLayer, Extent, webMercatorUtils) => {
 
     const layer = new FeatureLayer({
       // Override scale dependency inherited from the hosted layer/view.
@@ -53,6 +55,13 @@
       basemap: config.map?.basemap || "streets-navigation-vector",
       layers: [layer]
     });
+
+    const configuredMaxExtent = config.map?.max_extent
+      ? new Extent({
+          ...config.map.max_extent,
+          spatialReference: { wkid: config.map.max_extent.wkid || 4326 }
+        })
+      : null;
 
     const view = new MapView({
       container: "viewDiv",
@@ -647,6 +656,21 @@
         : `${filter.field} IS NOT NULL`;
     }
 
+    function expandUniqueFilterValues(filter, values) {
+      if (!filter?.value_groups) return values;
+
+      const expanded = [];
+      for (const value of values) {
+        const mapped = filter.value_groups[String(value)];
+        if (Array.isArray(mapped) && mapped.length) {
+          expanded.push(...mapped);
+        } else {
+          expanded.push(value);
+        }
+      }
+      return [...new Set(expanded.map(v => String(v)))];
+    }
+
     async function loadUniqueFilterValue(filter, { clearSelection = false } = {}) {
       if (!filter || filter.type !== "unique_values") return;
 
@@ -664,11 +688,25 @@
 
       const result = await filterLookupLayer.queryFeatures(q);
 
-      const values = [...new Set(
+      const sourceValues = [...new Set(
         result.features
           .map(f => f.attributes[filter.field])
           .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
-      )].sort((a, b) => String(a).localeCompare(String(b)));
+          .map(v => String(v))
+      )];
+
+      // value_groups lets one customer-facing choice represent multiple source
+      // values (for example, the NERIS and legacy NFIRS names for one department).
+      // The option value is the canonical/display name; buildWhere() expands it
+      // back to all matching source values when constructing the SQL clause.
+      const values = filter.value_groups
+        ? Object.keys(filter.value_groups).filter(key => {
+            const mapped = Array.isArray(filter.value_groups[key])
+              ? filter.value_groups[key].map(v => String(v))
+              : [String(key)];
+            return mapped.some(v => sourceValues.includes(v));
+          })
+        : sourceValues.sort((a, b) => a.localeCompare(b));
 
       const stillSelected = new Set(
         previousValues.filter(v => values.some(candidate => String(candidate) === String(v)))
@@ -744,7 +782,8 @@
 
         if (filter.type === "unique_values") {
           const values = selectedValues(control);
-          const clause = inClause(filter.field, values);
+          const queryValues = expandUniqueFilterValues(filter, values);
+          const clause = inClause(filter.field, queryValues);
           if (clause) clauses.push(clause);
         }
       }
@@ -943,14 +982,47 @@
           }
         } else {
           const factor = config.map?.extent_expand_factor ?? 1.15;
-          await view.goTo(extentResult.extent.expand(factor), { duration: 650 });
+          let targetExtent = extentResult.extent.expand(factor);
+
+          // The configured extent is only a ceiling for PROGRAMMATIC filter zooms.
+          // Do not put it in MapView.constraints: doing that can interfere with
+          // wheel navigation and basemap tile loading.
+          if (configuredMaxExtent) {
+            let maxExtent = configuredMaxExtent;
+
+            if (targetExtent.spatialReference?.isWebMercator && configuredMaxExtent.spatialReference?.isGeographic) {
+              maxExtent = webMercatorUtils.geographicToWebMercator(configuredMaxExtent);
+            }
+
+            const sameSR = maxExtent && (
+              targetExtent.spatialReference?.wkid === maxExtent.spatialReference?.wkid ||
+              (targetExtent.spatialReference?.isWebMercator && maxExtent.spatialReference?.isWebMercator)
+            );
+
+            if (sameSR) {
+              const exceedsHawaii =
+                targetExtent.xmin < maxExtent.xmin ||
+                targetExtent.ymin < maxExtent.ymin ||
+                targetExtent.xmax > maxExtent.xmax ||
+                targetExtent.ymax > maxExtent.ymax;
+
+              // If even one returned coordinate makes the query extent broader
+              // than Hawaii, use the known-good Hawaii extent. Do not intersect
+              // the two extents; an outlier can make that result unsuitable for goTo().
+              if (exceedsHawaii) targetExtent = maxExtent;
+            } else {
+              targetExtent = configuredMaxExtent;
+            }
+          }
+
+          await view.goTo(targetExtent, { duration: 650 });
         }
       } catch (e) {
         if (e.name !== "AbortError") console.error(e);
       }
     }
 
-    async function applyFilters() {
+    async function applyFilters({ zoomToResults = false } = {}) {
       const applyBtn = document.getElementById("applyBtn");
       statusEl.textContent = "Loading incidents...";
 
@@ -971,8 +1043,11 @@
         view.closePopup();
         renderList(currentFeatures);
 
-        if (currentFeatures.length) {
-          await zoomToFilteredExtent(where);
+        // Preserve the user's current map extent when filters are applied.
+        // Filtering changes the layer/list only; it must not navigate the map.
+        // Clicking an incident in the list still zooms to that incident.
+        if (zoomToResults && currentFeatures.length) {
+          console.debug("Filter applied: preserving current map extent.");
         }
 
         statusEl.textContent =
@@ -1093,7 +1168,7 @@
         statusEl.textContent = "Loading filter values...";
         await loadUniqueFilterValues();
 
-        await applyFilters();
+        await applyFilters({ zoomToResults: false });
       } catch (err) {
         console.error(err);
         statusEl.textContent = "Initialization failed. See browser console for details.";
